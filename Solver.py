@@ -97,8 +97,8 @@ class Solver:
         self.ApplyNearestNeighborMethod()
         # self.MinimumInsertions()
         self.ReportSolution(self.sol)
-        self.LocalSearch(1)
-        self.ReportSolution(self.bestSolution)
+        self.LocalSearch(0)
+        self.ReportSolution(self.sol)
         return self.sol
 
     def SetRoutedFlagToFalseForAllCustomers(self):
@@ -234,21 +234,38 @@ class Solver:
                         F = rt2.sequenceOfNodes[targetNodeIndex]
                         G = rt2.sequenceOfNodes[targetNodeIndex + 1]
 
+                        oldCost = rt1.cost + rt2.cost
+
                         if rt1 != rt2:
                             if rt2.load + B.demand > rt2.capacity:
                                 continue
+                        test_rt1 = copy.deepcopy(rt1)
+                        test_rt2 = copy.deepcopy(rt2)
+                        if test_rt1 == test_rt2:
+                            del test_rt1.sequenceOfNodes[originNodeIndex]
+                            if originNodeIndex < targetNodeIndex:
+                                test_rt2.sequenceOfNodes.insert(targetNodeIndex, B)
+                            else:
+                                test_rt2.sequenceOfNodes.insert(targetNodeIndex + 1, B)
+                        else:
+                            del test_rt1.sequenceOfNodes[originNodeIndex]
+                            test_rt2.sequenceOfNodes.insert(targetNodeIndex + 1, B)
 
-                        costAdded = self.distanceMatrix[A.ID][C.ID] + self.distanceMatrix[F.ID][B.ID] + \
-                                    self.distanceMatrix[B.ID][G.ID]
-                        costRemoved = self.distanceMatrix[A.ID][B.ID] + self.distanceMatrix[B.ID][C.ID] + \
-                                      self.distanceMatrix[F.ID][G.ID]
-
-                        originRtCostChange = self.distanceMatrix[A.ID][C.ID] - self.distanceMatrix[A.ID][B.ID] - \
-                                             self.distanceMatrix[B.ID][C.ID]
-                        targetRtCostChange = self.distanceMatrix[F.ID][B.ID] + self.distanceMatrix[B.ID][G.ID] - \
-                                             self.distanceMatrix[F.ID][G.ID]
-
-                        moveCost = costAdded - costRemoved
+                        c1, l1 = self.calculate_route_details(test_rt1.sequenceOfNodes)
+                        test_rt1.cost = c1
+                        test_rt1.load = l1
+                        c2, l2 = self.calculate_route_details(test_rt2.sequenceOfNodes)
+                        test_rt2.cost = c2
+                        test_rt2.load = l2
+                        new_cost = c1 + c2
+                        # costAdded = self.distanceMatrix[A.ID][C.ID] + self.distanceMatrix[F.ID][B.ID] + \
+                        #             self.distanceMatrix[B.ID][G.ID]
+                        # costRemoved = self.distanceMatrix[A.ID][B.ID] + self.distanceMatrix[B.ID][C.ID] + \
+                        #               self.distanceMatrix[F.ID][G.ID]
+                        #
+                        originRtCostChange = c1 - rt1.cost
+                        targetRtCostChange = c2 - rt2.cost
+                        moveCost = new_cost - oldCost
 
                         if moveCost < rm.moveCost:
                             self.StoreBestRelocationMove(originRouteIndex, targetRouteIndex, originNodeIndex,
