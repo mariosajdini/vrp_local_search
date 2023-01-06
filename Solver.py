@@ -98,7 +98,6 @@ class Solver:
         # self.MinimumInsertions()
         self.ReportSolution(self.sol)
         self.LocalSearch(0)
-        self.ReportSolution(self.sol)
         return self.sol
 
     def SetRoutedFlagToFalseForAllCustomers(self):
@@ -227,45 +226,73 @@ class Solver:
                                 targetNodeIndex == originNodeIndex or targetNodeIndex == originNodeIndex - 1):
                             continue
 
-                        A = rt1.sequenceOfNodes[originNodeIndex - 1]
-                        B = rt1.sequenceOfNodes[originNodeIndex]
-                        C = rt1.sequenceOfNodes[originNodeIndex + 1]
-
-                        F = rt2.sequenceOfNodes[targetNodeIndex]
-                        G = rt2.sequenceOfNodes[targetNodeIndex + 1]
-
+                        A: Node = rt1.sequenceOfNodes[originNodeIndex - 1]
+                        B: Node = rt1.sequenceOfNodes[originNodeIndex]
+                        cut_of_AB = len(rt1.sequenceOfNodes) - A.positionInRoute - 1
+                        C: Node = rt1.sequenceOfNodes[originNodeIndex + 1]
+                        cut_of_BC = len((rt1.sequenceOfNodes)) - B.positionInRoute - 1
+                        F: Node = rt2.sequenceOfNodes[targetNodeIndex]
+                        G: Node = rt2.sequenceOfNodes[targetNodeIndex + 1]
+                        cut_of_FG = len(rt2.sequenceOfNodes) - F.positionInRoute - 1
                         oldCost = rt1.cost + rt2.cost
-
                         if rt1 != rt2:
                             if rt2.load + B.demand > rt2.capacity:
                                 continue
-                        test_rt1 = copy.deepcopy(rt1)
-                        test_rt2 = copy.deepcopy(rt2)
-                        if test_rt1 == test_rt2:
-                            del test_rt1.sequenceOfNodes[originNodeIndex]
-                            if originNodeIndex < targetNodeIndex:
-                                test_rt2.sequenceOfNodes.insert(targetNodeIndex, B)
-                            else:
-                                test_rt2.sequenceOfNodes.insert(targetNodeIndex + 1, B)
-                        else:
-                            del test_rt1.sequenceOfNodes[originNodeIndex]
-                            test_rt2.sequenceOfNodes.insert(targetNodeIndex + 1, B)
+                        A: Node = rt1.sequenceOfNodes[originNodeIndex - 1]
+                        B: Node = rt1.sequenceOfNodes[originNodeIndex]
+                        cut_of_AB = len(rt1.sequenceOfNodes) - A.positionInRoute - 1
+                        C: Node = rt1.sequenceOfNodes[originNodeIndex + 1]
+                        cut_of_BC = len((rt1.sequenceOfNodes)) - B.positionInRoute - 1
+                        F: Node = rt2.sequenceOfNodes[targetNodeIndex]
+                        G: Node = rt2.sequenceOfNodes[targetNodeIndex + 1]
+                        cut_of_FG = len(rt2.sequenceOfNodes) - F.positionInRoute - 1
+                        oldCost = rt1.cost + rt2.cost
+                        cost_cummulative_removed_of_rt1 = 0
+                        for i in range(A.positionInRoute, 0, -1):
+                            pred = i - 1
+                            n1 = rt1.sequenceOfNodes[i]
+                            n2 = rt1.sequenceOfNodes[pred]
+                            cost_cummulative_removed_of_rt1 += self.distanceMatrix[n1.ID][n2.ID]
+                        cost_removed = cut_of_AB * self.distanceMatrix[A.ID][B.ID] + cut_of_BC * \
+                                       self.distanceMatrix[B.ID][C.ID]
+                        cost_cummulative_removed_of_rt1 += (len(rt1.sequenceOfNodes) - 2) * 10
+                        originRtCostChange = -cost_cummulative_removed_of_rt1 - \
+                                             cost_removed + cut_of_BC * self.distanceMatrix[A.ID][C.ID]
+                        cost_cummulative_add_of_rt2 = 0
+                        for i in range(F.positionInRoute, 0, -1):
+                            pred = i - 1
+                            n1 = rt2.sequenceOfNodes[i]
+                            n2 = rt2.sequenceOfNodes[pred]
+                            cost_cummulative_add_of_rt2 += self.distanceMatrix[n1.ID][n2.ID]
+                        cost_cummulative_add_of_rt2 += (len(rt2.sequenceOfNodes) - 1) * 10
+                        targetRtCostChange = cost_cummulative_add_of_rt2 - cut_of_FG * self.distanceMatrix[F.ID][G.ID] \
+                                             + cut_of_FG * self.distanceMatrix[B.ID][G.ID] \
+                                             + (cut_of_FG + 1) * self.distanceMatrix[F.ID][B.ID]
+                        moveCost = targetRtCostChange + originRtCostChange
 
-                        c1, l1 = self.calculate_route_details(test_rt1.sequenceOfNodes)
-                        test_rt1.cost = c1
-                        test_rt1.load = l1
-                        c2, l2 = self.calculate_route_details(test_rt2.sequenceOfNodes)
-                        test_rt2.cost = c2
-                        test_rt2.load = l2
-                        new_cost = c1 + c2
-                        # costAdded = self.distanceMatrix[A.ID][C.ID] + self.distanceMatrix[F.ID][B.ID] + \
-                        #             self.distanceMatrix[B.ID][G.ID]
-                        # costRemoved = self.distanceMatrix[A.ID][B.ID] + self.distanceMatrix[B.ID][C.ID] + \
-                        #               self.distanceMatrix[F.ID][G.ID]
+                        # # easy way
+                        # test_rt1 = copy.deepcopy(rt1)
+                        # test_rt2 = copy.deepcopy(rt2)
+                        # if test_rt1 == test_rt2:
+                        #      del test_rt1.sequenceOfNodes[originNodeIndex]
+                        #      if originNodeIndex < targetNodeIndex:
+                        #          test_rt2.sequenceOfNodes.insert(targetNodeIndex, B)
+                        #      else:
+                        #          test_rt2.sequenceOfNodes.insert(targetNodeIndex + 1, B)
+                        # else:
+                        #      del test_rt1.sequenceOfNodes[originNodeIndex]
+                        #      test_rt2.sequenceOfNodes.insert(targetNodeIndex + 1, B)
                         #
-                        originRtCostChange = c1 - rt1.cost
-                        targetRtCostChange = c2 - rt2.cost
-                        moveCost = new_cost - oldCost
+                        # c1, l1 = self.calculate_route_details(test_rt1.sequenceOfNodes)
+                        # test_rt1.cost = c1
+                        # test_rt1.load = l1
+                        # c2, l2 = self.calculate_route_details(test_rt2.sequenceOfNodes)
+                        # test_rt2.cost = c2
+                        # test_rt2.load = l2
+                        # new_cost = c1 + c2
+                        # originRtCostChange = c1 - rt1.cost
+                        # targetRtCostChange = c2 - rt2.cost
+                        # moveCost = new_cost - oldCost
 
                         if moveCost < rm.moveCost:
                             self.StoreBestRelocationMove(originRouteIndex, targetRouteIndex, originNodeIndex,
@@ -350,7 +377,6 @@ class Solver:
                                                    moveCost, costChangeFirstRoute, costChangeSecondRoute, sm)
 
     def ApplyRelocationMove(self, rm: RelocationMove):
-
         oldCost = self.CalculateTotalCost(self.sol)
 
         originRt = self.sol.routes[rm.originRoutePosition]
@@ -377,9 +403,22 @@ class Solver:
         self.sol.cost += rm.moveCost
 
         newCost = self.CalculateTotalCost(self.sol)
+        self.Update_Positions_In_Routes(originRt, targetRt)
         # debuggingOnly
         if abs((newCost - oldCost) - rm.moveCost) > 0.0001:
+            print("Tryed to do relocation from Node " + str(rm.originNodePosition) + " of Route " + str(
+                rm.originRoutePosition) + " to Node " + str(rm.targetNodePosition) + " of Route " + str(
+                rm.targetRoutePosition))
+            self.ReportSolution(self.sol)
             print('Cost Issue')
+
+    def Update_Positions_In_Routes(self, rt1, rt2):
+        for i in range(0, len(rt1.sequenceOfNodes)):
+            n1: Node = rt1.sequenceOfNodes[i]
+            n1.positionInRoute = i
+        for i in range(0, len(rt2.sequenceOfNodes)):
+            n1: Node = rt2.sequenceOfNodes[i]
+            n1.positionInRoute = i
 
     def ApplySwapMove(self, sm):
         print("swaped the " + str(sm.positionOfFirstNode) + " node of the " +
@@ -453,7 +492,8 @@ class Solver:
         c = 0
         for i in range(0, len(sol.routes)):
             rt = sol.routes[i]
-            c += self.calculate_cost(rt)
+            ci, l = self.calculate_route_details(rt.sequenceOfNodes)
+            c += ci
         return c
 
     def InitializeOperators(self, rm, sm, top):
@@ -591,6 +631,7 @@ class Solver:
 
             self.UpdateRouteCostAndLoad(rt1)
             self.UpdateRouteCostAndLoad(rt2)
+            self.Update_Positions_In_Routes(rt1,rt2)
 
         self.sol.cost += top.moveCost
 
