@@ -47,6 +47,7 @@ class Node:
         self.positionInRoute=0
         self.untime = untime
         self.waitingtime = 0
+        self.cost_up_to_here = 0
 
 
 class Route:

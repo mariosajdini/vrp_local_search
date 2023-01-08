@@ -80,6 +80,19 @@ class TwoOptMove(object):
         self.positionOfSecondNode = None
         self.moveCost = 10 ** 9
 
+def createOutputTxt(solver):
+    with open('solution.txt', 'w') as f:
+        f.write('Cost:\n')
+        f.write(str(solver.sol.cost))
+        f.write('\n')
+        f.write('Routes:')
+        f.write('\n')
+        f.write(str(len(solver.sol.routes)))
+        f.write('\n')
+        for i in solver.sol.routes:
+            route = [n.ID for n in i.sequenceOfNodes]
+            f.write(str(route)[1:-1])
+            f.write('\n')
 
 class Solver:
     def __init__(self, m):
@@ -95,10 +108,58 @@ class Solver:
     def solve(self):
         self.SetRoutedFlagToFalseForAllCustomers()
         self.ApplyNearestNeighborMethod()
-        # self.MinimumInsertions()
         self.ReportSolution(self.sol)
+        # self.MinimumInsertions()
+        # self.geteasysol()
+        # self.ReportSolution(self.sol)
+        self.LocalSearch(2)
+        self.LocalSearch(1)
         self.LocalSearch(0)
+        self.LocalSearch(2)
+        self.LocalSearch(1)
+        self.LocalSearch(0)
+        self.LocalSearch(2)
+        self.LocalSearch(1)
+        self.LocalSearch(0)
+        createOutputTxt(self)
         return self.sol
+
+
+    def geteasysol(self):
+        routes = [[52, 88, 7, 82, 48, 8, 46], [89, 18, 60, 83, 5, 17, 47, 36], [12, 68, 80, 29, 24, 65],
+                  [28, 77, 3, 79, 78, 34, 35], [58, 97, 87, 42, 15, 43], [6, 96, 99, 85, 91, 16, 86, 14],
+                  [76, 50, 33, 9, 51, 66, 71], [95, 59, 92, 98, 61, 84, 45, 19, 64], [53, 2, 57, 41, 22, 67],
+                  [69, 70, 30, 20, 32, 90, 63, 49, 11], [40, 21, 73, 72, 74, 75, 23],
+                  [13, 94, 93, 37, 100, 44, 38], [27, 31, 62, 10, 1, 81], [26, 54, 55, 25, 4, 56, 39]]
+        rts = []
+        self.sol = Solution()
+        for i in routes:
+            self.sol.routes.append(Route(self.depot, self.capacity))
+            rt = self.sol.routes[-1]
+            for j in i:
+                rt.sequenceOfNodes.append(self.allNodes[j])
+            rts.append(rt)
+        for j in self.sol.routes:
+            j: Route
+            rt_load = 0
+            rt_cumulative_cost = 0
+            tot_time = 0
+            nodes_sequence = j.sequenceOfNodes
+            for i in range(len(nodes_sequence) - 1):
+                from_node = nodes_sequence[i]
+                to_node = nodes_sequence[i + 1]
+                tot_time += self.distanceMatrix[from_node.ID][to_node.ID]
+                rt_cumulative_cost += tot_time
+                tot_time += 10
+                rt_load += from_node.demand
+            j.load = rt_load
+            j.cost = rt_cumulative_cost
+        for j in self.sol.routes:
+            j: Route
+            for i in range(1, len(j.sequenceOfNodes)-1):
+                print(i)
+                n: Node = j.sequenceOfNodes[i]
+                n.positionInRoute = i
 
     def SetRoutedFlagToFalseForAllCustomers(self):
         for i in range(0, len(self.customers)):
@@ -122,19 +183,21 @@ class Solver:
             self.sol.routes.append(Route(self.depot, self.capacity))
         j = 0
         for i in range(1, len(self.allNodes)):
-            route = self.sol.routes[j % 14]
-            node = route.sequenceOfNodes[-1]
-            nearest_possible, value = self.find_node(route, node)
-            self.allNodes[nearest_possible].isRouted = True
-            if (len(route.sequenceOfNodes) == 1):
-                self.allNodes[nearest_possible].waitingtime = value
-            else:
-                self.allNodes[nearest_possible].waitingtime = route.sequenceOfNodes[-1].waitingtime + value
-            route.load += self.allNodes[nearest_possible].demand
-            route.cost += self.allNodes[nearest_possible].waitingtime
-            self.allNodes[nearest_possible].waitingtime += 10
-            route.sequenceOfNodes.append(self.allNodes[nearest_possible])
-            self.allNodes[nearest_possible].positionInRoute = len(route.sequenceOfNodes) - 1
+            route_index = j % 14
+            route: Route = self.sol.routes[route_index]
+            last_node: Node = route.sequenceOfNodes[-1]
+            nearest_possible, value = self.find_node(route, last_node)
+            n1: Node = self.allNodes[nearest_possible]
+            n1.isRouted = True
+            up_coming_len = len(route.sequenceOfNodes) + 1
+            if up_coming_len > 2:
+                n1.waitingtime += 10
+            n1.waitingtime += last_node.waitingtime + value
+            route.cost += n1.waitingtime
+            route.load += n1.demand
+            n1.cost_up_to_here = route.cost
+            n1.positionInRoute = len(route.sequenceOfNodes)
+            route.sequenceOfNodes.append(n1)
             j += 1
 
         if (modelIsFeasible == False):
@@ -390,7 +453,7 @@ class Solver:
                 targetRt.sequenceOfNodes.insert(rm.targetNodePosition, B)
             else:
                 targetRt.sequenceOfNodes.insert(rm.targetNodePosition + 1, B)
-
+            self.updates_cost_and_positions(originRt)
             originRt.cost += rm.moveCost
         else:
             del originRt.sequenceOfNodes[rm.originNodePosition]
@@ -399,11 +462,12 @@ class Solver:
             targetRt.cost += rm.costChangeTargetRt
             originRt.load -= B.demand
             targetRt.load += B.demand
+            self.updates_cost_and_positions(originRt)
+            self.updates_cost_and_positions(targetRt)
 
         self.sol.cost += rm.moveCost
 
         newCost = self.CalculateTotalCost(self.sol)
-        self.Update_Positions_In_Routes(originRt, targetRt)
         # debuggingOnly
         if abs((newCost - oldCost) - rm.moveCost) > 0.0001:
             print("Tryed to do relocation from Node " + str(rm.originNodePosition) + " of Route " + str(
@@ -439,11 +503,14 @@ class Solver:
         rt2.sequenceOfNodes[sm.positionOfSecondNode].positionInRoute = sm.positionOfSecondNode
         if (rt1 == rt2):
             rt1.cost += sm.moveCost
+            self.updates_cost_and_positions(rt1)
         else:
             rt1.cost += sm.costChangeFirstRt
             rt2.cost += sm.costChangeSecondRt
             rt1.load = rt1.load - b1.demand + b2.demand
             rt2.load = rt2.load + b1.demand - b2.demand
+            self.updates_cost_and_positions(rt1)
+            self.updates_cost_and_positions(rt2)
 
         self.sol.cost += sm.moveCost
 
@@ -463,7 +530,7 @@ class Solver:
                     print(rt.sequenceOfNodes[j].ID, end=' ')
                 else:
                     print("," + str(rt.sequenceOfNodes[j].ID), end=' ')
-            print(rt.cost)
+            print(rt.cost,rt.sequenceOfNodes[-1].cost_up_to_here)
             tc += rt.cost
             sol.cost += rt.cost
         print(tc)
@@ -521,15 +588,8 @@ class Solver:
                         if rt1 == rt2:
                             if nodeInd1 == 0 and nodeInd2 == len(rt1.sequenceOfNodes) - 2:
                                 continue
-                            cost_now = rt1.cost
-                            testrt = copy.deepcopy(rt1)
-                            reversedSegment = reversed(
-                                testrt.sequenceOfNodes[nodeInd1 + 1: nodeInd2 + 1])
-                            # lst = list(reversedSegment)
-                            # lst2 = list(reversedSegment)
-                            testrt.sequenceOfNodes[nodeInd1 + 1: nodeInd2 + 1] = reversedSegment
-                            cost_new = self.calculate_cost(testrt)
-                            moveCost = cost_new - cost_now
+
+                            moveCost = self.same_route_two_opt(nodeInd1,nodeInd2,rt1)
                         else:
                             if nodeInd1 == 0 and nodeInd2 == 0:
                                 continue
@@ -539,25 +599,63 @@ class Solver:
                             if self.CapacityIsViolated(rt1, nodeInd1, rt2, nodeInd2):
                                 continue
                             cost_old = rt1.cost + rt2.cost
-                            test1 = copy.deepcopy(rt1)
-                            test2 = copy.deepcopy(rt2)
-                            relocatedSegmentOfRt1 = test1.sequenceOfNodes[nodeInd1 + 1:]
-
-                            # slice with the nodes from position top.positionOfFirstNode + 1 onwards
-                            relocatedSegmentOfRt2 = test2.sequenceOfNodes[nodeInd2 + 1:]
-
-                            del test1.sequenceOfNodes[nodeInd1 + 1:]
-                            del test2.sequenceOfNodes[nodeInd2 + 1:]
-
-                            test1.sequenceOfNodes.extend(relocatedSegmentOfRt2)
-                            test2.sequenceOfNodes.extend(relocatedSegmentOfRt1)
-                            # cost added not calculated this way
-                            c1 = self.calculate_cost(test1)
-                            c2 = self.calculate_cost(test2)
-                            cost_new = c1 + c2
+                            cost_new = self.calculate_two_opt_cost(rtInd1,rtInd2,nodeInd1,nodeInd2)
                             moveCost = cost_new - cost_old
                         if moveCost < top.moveCost:
                             self.StoreBestTwoOptMove(rtInd1, rtInd2, nodeInd1, nodeInd2, moveCost, top)
+
+    def calculate_two_opt_cost(self,positionOfFirstRoute, positionOfSecondRoute, positionOfFirstNode, positionOfSecondNode):
+        rt1: Route = self.sol.routes[positionOfFirstRoute]
+        rt2: Route = self.sol.routes[positionOfSecondRoute]
+        n1: Node = rt1.sequenceOfNodes[positionOfFirstNode]
+        n2: Node = rt2.sequenceOfNodes[positionOfSecondNode]
+        relocated_segment1 = rt1.sequenceOfNodes[positionOfFirstNode + 1:]
+        relocated_segment2 = rt2.sequenceOfNodes[positionOfSecondNode + 1:]
+        rt_cumulative_cost = n1.cost_up_to_here
+        tot_time = n1.waitingtime
+        from_node = n1
+        for i in range(len(relocated_segment2)):
+            to_node = relocated_segment2[i]
+            tot_time += self.distanceMatrix[from_node.ID][to_node.ID]
+            tot_time += 10
+            rt_cumulative_cost += tot_time
+            from_node = to_node
+        rt1_new_cost = rt_cumulative_cost
+        rt_cumulative_cost = n2.cost_up_to_here
+        tot_time = n2.waitingtime
+        from_node = n2
+        for i in range(len(relocated_segment1)):
+            to_node = relocated_segment1[i]
+            tot_time += self.distanceMatrix[from_node.ID][to_node.ID]
+            tot_time += 10
+            rt_cumulative_cost += tot_time
+            from_node = to_node
+        rt2_new_cost = rt_cumulative_cost
+        return rt1_new_cost + rt2_new_cost
+
+    def same_route_two_opt(self,node1Index, node2Index, rt: Route):
+        reversedSegment = reversed(
+            rt.sequenceOfNodes[node1Index + 1: node2Index + 1])
+        relocated_segment = list(reversedSegment)
+        prev: Node = rt.sequenceOfNodes[node1Index]
+        cost_added = 0
+        times = len(rt.sequenceOfNodes) - node1Index - 1
+        for i in range(0, len(relocated_segment)):
+            next_node: Node = relocated_segment[i]
+            cost_added += times * self.distanceMatrix[prev.ID][next_node.ID]
+            prev = next_node
+            times -= 1
+        cost_added += times * self.distanceMatrix[relocated_segment[-1].ID][rt.sequenceOfNodes[node2Index + 1].ID]
+        prev: Node = rt.sequenceOfNodes[node1Index]
+        cost_removed = 0
+        times = len(rt.sequenceOfNodes) - prev.positionInRoute - 1
+        for i in range(node1Index + 1, node2Index + 2):
+            next_node: Node = rt.sequenceOfNodes[i]
+            cost_removed += times * self.distanceMatrix[prev.ID][next_node.ID]
+            prev = next_node
+            times -= 1
+        move_cost = cost_added - cost_removed
+        return move_cost
 
     def CapacityIsViolated(self, rt1, nodeInd1, rt2, nodeInd2):
 
@@ -580,6 +678,8 @@ class Solver:
 
         return False
 
+
+
     def StoreBestTwoOptMove(self, rtInd1, rtInd2, nodeInd1, nodeInd2, moveCost, top):
         top.positionOfFirstRoute = rtInd1
         top.positionOfSecondRoute = rtInd2
@@ -600,10 +700,10 @@ class Solver:
             rt_load += from_node.demand
         return rt_cumulative_cost, rt_load
 
-    def ApplyTwoOptMove(self, top):
+    def ApplyTwoOptMove(self, top ):
         rt1: Route = self.sol.routes[top.positionOfFirstRoute]
         rt2: Route = self.sol.routes[top.positionOfSecondRoute]
-
+        oldCost = self.CalculateTotalCost(self.sol)
         if rt1 == rt2:
             # reverses the nodes in the segment [positionOfFirstNode + 1,  top.positionOfSecondNode]
             reversedSegment = reversed(rt1.sequenceOfNodes[top.positionOfFirstNode + 1: top.positionOfSecondNode + 1])
@@ -615,7 +715,7 @@ class Solver:
             # rt1.sequenceOfNodes[top.positionOfFirstNode + 1: top.positionOfSecondNode + 1] = reversedSegmentList
 
             rt1.cost += top.moveCost
-
+            self.updates_cost_and_positions(rt1)
         else:
             # slice with the nodes from position top.positionOfFirstNode + 1 onwards
             relocatedSegmentOfRt1 = rt1.sequenceOfNodes[top.positionOfFirstNode + 1:]
@@ -628,12 +728,20 @@ class Solver:
 
             rt1.sequenceOfNodes.extend(relocatedSegmentOfRt2)
             rt2.sequenceOfNodes.extend(relocatedSegmentOfRt1)
-
-            self.UpdateRouteCostAndLoad(rt1)
-            self.UpdateRouteCostAndLoad(rt2)
-            self.Update_Positions_In_Routes(rt1,rt2)
+            print("Done to do top from Node " + str(top.positionOfFirstNode) + " of Route " + str(
+                top.positionOfFirstRoute) + " to Node " + str(top.positionOfFirstNode) + " of Route " + str(
+                top.positionOfSecondRoute))
+            self.updates_cost_and_positions(rt1)
+            self.updates_cost_and_positions(rt2)
 
         self.sol.cost += top.moveCost
+        newCost = self.CalculateTotalCost(self.sol)
+        # debuggingOnly
+        if abs((newCost - oldCost) - top.moveCost) > 0.0001:
+            print("Tryed to do top from Node " + str(top.positionOfFirstNode) + " of Route " + str(
+                top.positionOfFirstRoute) + " to Node " + str(top.positionOfFirstNode) + " of Route " + str(
+                top.positionOfSecondRoute))
+            print('Cost Issue')
 
     def UpdateRouteCostAndLoad(self, rt: Route):
         c, li = self.calculate_route_details(rt.sequenceOfNodes)
@@ -641,6 +749,25 @@ class Solver:
         tl = li
         rt.load = li
         rt.cost = c
+
+    def updates_cost_and_positions(self,route: Route):
+        node_before = route.sequenceOfNodes[0]
+        route.cost = 0
+        route.load = 0
+        for i in range(1, len(route.sequenceOfNodes)):
+            # zero everything
+            n1: Node = route.sequenceOfNodes[i]
+            n1.waitingtime = 0
+            n1.cost_up_to_here = 0
+            n1.positionInRoute = 0
+            if i > 1:
+                n1.waitingtime += 10
+            n1.waitingtime += node_before.waitingtime + self.distanceMatrix[node_before.ID][n1.ID]
+            route.cost += n1.waitingtime
+            route.load += n1.demand
+            n1.cost_up_to_here = route.cost
+            n1.positionInRoute = i
+            node_before = n1
 
     def calculate_cost(self, rt: Route):
         cost = 0
